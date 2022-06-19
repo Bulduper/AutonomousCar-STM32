@@ -1,0 +1,15 @@
+# Eclipse
+.metadata
+.settings
+[Rr]elease
+[Dd]ebug
+.launch
+
+# CDT-specific (C/C++ Development Tooling)
+.cproject
+
+# Locally stored "Eclipse launch configurations"
+*.launch
+
+#mxproject
+.mxproject
