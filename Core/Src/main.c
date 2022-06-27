@@ -217,7 +217,8 @@ void setTurnAngle(float wheel_angle);
 void USER_UART_IRQHandler(UART_HandleTypeDef* huart);
 void telemetryResponse();
 void sensorResponse();
-void interpretMessage(uint8_t data_length);
+void interpretMessage(char*);
+void parseBuffer(uint8_t);
 void USER_UART_IDLECallback(UART_HandleTypeDef *huart);
 void loop100Hz();
 void loop1Hz();
@@ -1120,7 +1121,7 @@ void USER_UART_IRQHandler(UART_HandleTypeDef* huart)
 
 void telemetryResponse()
 {
-	sprintf(str,"{\"speed\":%f, \"angle\":%d, \"bat_vol\":%f, \"pos_reg\":%d}\n",curSpeed,(int16_t)getTurnAngle(),bat_voltage,posRegulationEnabled);
+	sprintf(str,"{\"speed\":%.1f, \"angle\":%d, \"speed_limit\":%.1f,\"bat_vol\":%.1f, \"pos_reg\":%d}\n",curSpeed,(int16_t)getTurnAngle(),speed_limit,bat_voltage,posRegulationEnabled);
 	sendString(str);
 }
 
@@ -1141,13 +1142,9 @@ void sensorResponse()
 	sprintf(str,"{\"sensors\":[%d,%d,%d,%d,%d,%d]}\n",dist_buf[0]/samples,dist_buf[1]/samples,dist_buf[2]/samples,dist_buf[3]/samples,dist_buf[4]/samples,dist_buf[5]/samples);
 	sendString(str);
 }
-//ISSUE:
-//If there are more commands in the buffer, only the first one
-//will be interpreted. Maybe split data on '\n'?
-void interpretMessage(uint8_t data_length)
+
+void interpretMessage(char* message)
 {
-	char message[data_length];
-	strncpy((char*)message,(char*)UART1_rxBuffer,data_length);
 	char command = message[0];
 	float value = atof(message+1);
 	switch(command)
@@ -1176,7 +1173,11 @@ void interpretMessage(uint8_t data_length)
 	case 's':
 	{
 		if(value<=0.1f)speed_limit=MAX_SPEED;
-		else speed_limit = value;
+		else
+		{
+			speed_limit = value;
+			target_speed = constrain(target_speed,-speed_limit, speed_limit);
+		}
 		break;
 	}
 	//environment
@@ -1219,6 +1220,30 @@ void interpretMessage(uint8_t data_length)
 	}
 }
 
+//Parses message by message, splits on newline character
+void parseBuffer(uint8_t length)
+{
+	uint8_t remaining_length = length;
+	uint8_t* p = UART1_rxBuffer;
+	while(remaining_length)
+	{
+		int i = 0;
+		char message[100];
+		memset(message,0,sizeof message);
+		while( i < remaining_length && *p !='\n' )
+		{
+			message[i] = (char)*p;
+			i++;
+			p++;
+		}
+		remaining_length -= (i+1);
+		message[i] = '\0';
+		if(i>0)interpretMessage(message);
+//        HAL_UART_Transmit(&huart2,(uint8_t*)message,i+1,0x200);
+		p++;
+	}
+}
+
 //uart idle state callback function
 void USER_UART_IDLECallback(UART_HandleTypeDef *huart)
 {
@@ -1229,8 +1254,9 @@ void USER_UART_IDLECallback(UART_HandleTypeDef *huart)
     uint8_t data_length  = UART_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
 
 	//Test function: Print out the received data
-    //HAL_UART_Transmit(huart,UART1_rxBuffer,data_length,0x200);
-    interpretMessage(data_length);
+//    HAL_UART_Transmit(&huart2,UART1_rxBuffer,data_length,0x200);
+    parseBuffer(data_length);
+
 	//Zero Receiving Buffer
     memset(UART1_rxBuffer,0,data_length);
     data_length = 0;
