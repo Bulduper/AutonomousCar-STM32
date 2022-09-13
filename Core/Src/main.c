@@ -217,6 +217,7 @@ void setTurnAngle(float wheel_angle);
 void USER_UART_IRQHandler(UART_HandleTypeDef* huart);
 void telemetryResponse();
 void sensorResponse();
+void configResponse();
 void interpretMessage(char*);
 void parseBuffer(uint8_t);
 void USER_UART_IDLECallback(UART_HandleTypeDef *huart);
@@ -1121,7 +1122,7 @@ void USER_UART_IRQHandler(UART_HandleTypeDef* huart)
 
 void telemetryResponse()
 {
-	sprintf(str,"{\"speed\":%.1f, \"angle\":%d, \"speed_limit\":%.1f,\"bat_vol\":%.1f, \"pos_reg\":%d}\n",curSpeed,(int16_t)getTurnAngle(),speed_limit,bat_voltage,posRegulationEnabled);
+	sprintf(str,"{\"telemetry\":{\"speed\":%.1f, \"angle\":%d, \"speed_limit\":%.1f,\"bat_vol\":%.1f, \"pv\":\"%s\", \"pos\":%.1f}}\n",curSpeed,(int16_t)getTurnAngle(),speed_limit,bat_voltage,posRegulationEnabled?"position":"speed",curPos);
 	sendString(str);
 }
 
@@ -1139,7 +1140,13 @@ void sensorResponse()
 		}
 		await_distance--;
 	}
-	sprintf(str,"{\"sensors\":[%d,%d,%d,%d,%d,%d]}\n",dist_buf[0]/samples,dist_buf[1]/samples,dist_buf[2]/samples,dist_buf[3]/samples,dist_buf[4]/samples,dist_buf[5]/samples);
+	sprintf(str,"{\"distance\":[%d,%d,%d,%d,%d,%d]}\n",dist_buf[0]/samples,dist_buf[1]/samples,dist_buf[2]/samples,dist_buf[3]/samples,dist_buf[4]/samples,dist_buf[5]/samples);
+	sendString(str);
+}
+
+void configResponse()
+{
+	sprintf(str,"{\"config\":{\"speed_kP\":%f, \"speed_kI\":%f, \"speed_kD\":%f,\"pos_kP\":%f, \"pos_kI\":%f, \"pos_kD\":%f}}\n",kP,kI,kD,kP_pos,0.0f,0.0f);
 	sendString(str);
 }
 
@@ -1215,6 +1222,9 @@ void interpretMessage(char* message)
 		HAL_GPIO_WritePin(LED_3_PORT, LED_3_PIN, !((uint8_t)value & 0b100));
 		break;
 	}
+	case 'C':
+		configResponse();
+		break;
 	default:
 		break;
 	}
